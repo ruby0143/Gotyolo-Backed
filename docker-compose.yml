@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gotyolo:latest
+    ports:
+      - "8080:8080"
+    environment:
+      # Override Spring datasource properties so the container connects to the Postgres service
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/gotyolo
+      - SPRING_DATASOURCE_USERNAME=gotyolo
+      - SPRING_DATASOURCE_PASSWORD=meteor@350
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+    depends_on:
+      - postgres
+    networks:
+      - gotyolo-network
+
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: gotyolo
+      POSTGRES_USER: gotyolo
+      POSTGRES_PASSWORD: meteor@350
+    volumes:
+      - postgres_data:/var/lib/postgresql/dat
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gotyolo-network
+
+volumes:
+  postgres_data:
+
+networks:
+  gotyolo-network:
+    driver: bridge
+

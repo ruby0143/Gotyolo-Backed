@@ -26,21 +26,20 @@ public interface TripRepository extends JpaRepository<TripEntity, UUID> {
             
                 COALESCE(SUM(b.num_seats), 0) AS bookedSeats,
             
-                COUNT(CASE WHEN b.state = 'CONFIRMED' THEN 1 END) AS confirmed,
-                COUNT(CASE WHEN b.state = 'PENDING_PAYMENT' THEN 1 END) AS pendingPayment,
-                COUNT(CASE WHEN b.state = 'CANCELLED' THEN 1 END) AS cancelled,
-                COUNT(CASE WHEN b.state = 'EXPIRED' THEN 1 END) AS expired,
+                COALESCE(SUM(CASE WHEN b.state = 'CONFIRMED' THEN b.num_seats ELSE 0 END), 0) AS confirmed,
+                COALESCE(SUM(CASE WHEN b.state = 'PENDING_PAYMENT' THEN b.num_seats ELSE 0 END), 0) AS pendingPayment,
+                COALESCE(SUM(CASE WHEN b.state = 'CANCELLED' THEN b.num_seats ELSE 0 END), 0) AS cancelled,
+                COALESCE(SUM(CASE WHEN b.state = 'EXPIRED' THEN b.num_seats ELSE 0 END), 0) AS expired,
             
                 COALESCE(SUM(
-                    CASE WHEN b.state = 'CONFIRMED' THEN b.price_at_booking ELSE 0 END
+                    CASE WHEN b.state = 'CONFIRMED' or b.state = 'CANCELLED' THEN b.price_at_booking ELSE 0 END
                 ), 0) AS grossRevenue,
             
                 COALESCE(SUM(
                     CASE WHEN b.state = 'CANCELLED' THEN b.refund_amount ELSE 0 END
-                ), 0) AS refundsIssued,
-            
-            FROM trip t
-            LEFT JOIN booking b ON b.trip_id = t.id
+                ), 0) AS refundsIssued
+            FROM trips t
+            LEFT JOIN bookings b ON b.trip_id = t.id
             WHERE t.id = :tripId
             GROUP BY t.id, t.title, t.max_capacity, t.available_seats
             """)
@@ -57,7 +56,7 @@ public interface TripRepository extends JpaRepository<TripEntity, UUID> {
                     / NULLIF(t.max_capacity, 0)
                 ) AS occupancyPercent,
                 'Low occupancy with imminent departure' AS reason
-            FROM trip t
+            FROM trips t
             WHERE t.start_date BETWEEN CURRENT_DATE
                   AND CURRENT_DATE + INTERVAL '7 days'
             AND (

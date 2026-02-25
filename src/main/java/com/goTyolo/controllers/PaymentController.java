@@ -4,6 +4,7 @@ import com.goTyolo.dto.BookingData;
 import com.goTyolo.dto.PaymentEventPayload;
 import com.goTyolo.service.BookingService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.ObjectMapper;
 
+@Slf4j
 @RestController
 @RequestMapping("/payments")
 @RequiredArgsConstructor
@@ -27,11 +29,11 @@ public class PaymentController {
             try {
                 PaymentEventPayload paymentResponse = objectMapper.readValue(payload, PaymentEventPayload.class);
                 BookingData bookingData = bookingService.validateAndUpdateBookingState(paymentResponse);
-                return ResponseEntity.accepted().build();
+                return ResponseEntity.accepted().body(bookingData);
 
             } catch (Exception e) {
-                e.printStackTrace();
-                return ResponseEntity.badRequest().build();
+                log.error("Error processing payment webhook: {}", e.getMessage());
+                return ResponseEntity.accepted().body(e.getMessage());
             }
     }
 

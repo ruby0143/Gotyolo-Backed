@@ -6,6 +6,7 @@ import com.goTyolo.dto.PaymentEventPayload;
 import com.goTyolo.enums.BookingState;
 import com.goTyolo.enums.PaymentState;
 import com.goTyolo.enums.TripStatus;
+import com.goTyolo.exception.BookingCancellationException;
 import com.goTyolo.models.BookingEntity;
 import com.goTyolo.models.PaymentEventEntity;
 import com.goTyolo.models.TripEntity;
@@ -13,6 +14,7 @@ import com.goTyolo.repository.BookingRepository;
 import com.goTyolo.repository.PaymentEventRepository;
 import com.goTyolo.repository.TripRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -26,9 +28,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
+
 import com.goTyolo.exception.TripNotFoundException;
 import com.goTyolo.exception.BookingNotFoundException;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BookingService {
@@ -71,25 +76,30 @@ public class BookingService {
             Optional<BookingEntity> bookingEntity = bookingRepository.findByIdForUpdate(eventPayload.getBookingId());
             if (bookingEntity.isPresent()){
                 BookingEntity booking = bookingEntity.get();
-                if (booking.getState() != BookingState.PENDING_PAYMENT) {
-                    throw new RuntimeException("Booking is not in a valid state for payment processing");
-                }
-                if (eventPayload.getState().equals(PaymentState.SUCCESS.toString())) {
-                    booking.setState(BookingState.CONFIRMED);
-                } else {
-                    booking.setState(BookingState.EXPIRED);
-                    releaseSeats(booking);
-                }
-                booking.setUpdatedAt(LocalDateTime.now());
-                bookingRepository.save(booking);
+                if (booking.getState() == BookingState.PENDING_PAYMENT) {
+                    if(LocalDateTime.now().isAfter(booking.getExpiresAt())){
+                        booking.setState(BookingState.EXPIRED);
+                        releaseSeats(booking);
+                    }
+                    else{
+                        if (eventPayload.getState().equals(PaymentState.SUCCESS.toString())) {
+                            booking.setState(BookingState.CONFIRMED);
+                        } else {
+                            booking.setState(BookingState.EXPIRED);
+                            releaseSeats(booking);
+                        }
 
-                // Save the payment event for idempotency tracking
-                PaymentEventEntity paymentEventEntity = new PaymentEventEntity();
-                paymentEventEntity.setIdempotencyKey(eventPayload.getIdempotencyKey());
-                paymentEventEntity.setState(PaymentState.SUCCESS.toString());
-                paymentEventEntity.setBookingId(eventPayload.getBookingId());
-                paymentEventRepository.save(paymentEventEntity);
+                        // Save the payment event for idempotency tracking
+                        PaymentEventEntity paymentEventEntity = new PaymentEventEntity();
+                        paymentEventEntity.setIdempotencyKey(eventPayload.getIdempotencyKey());
+                        paymentEventEntity.setState(PaymentState.SUCCESS.toString());
+                        paymentEventEntity.setBookingId(eventPayload.getBookingId());
+                        paymentEventRepository.save(paymentEventEntity);
 
+                    }
+                    booking.setUpdatedAt(LocalDateTime.now());
+                    bookingRepository.save(booking);
+                }
                 return mapToData(booking);
             }
             else {
@@ -130,7 +140,7 @@ public class BookingService {
                 return mapToData(booking);
             }
             else {
-                throw new RuntimeException("Only confirmed bookings can be cancelled");
+                throw new BookingCancellationException("Only confirmed or pending payment bookings can be cancelled");
             }
         }
         else {
@@ -182,7 +192,7 @@ public class BookingService {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     protected void handleBookingCreatedEvent(BookingCreatedEvent event) {
         BookingEntity booking = bookingRepository.findById(event.getBookingId())
-                .orElseThrow(() -> new RuntimeException("Booking not found with id: " + event.getBookingId()));
+                .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + event.getBookingId()));
         initiatePayment(booking);
     }
 
@@ -206,10 +216,11 @@ public class BookingService {
             response.getStatusCode().is2xxSuccessful();
         } catch (Exception e) {
             // Log error or handle as needed
+            log.error("Failed to initiate payment for booking id: " + booking.getId(), e);
         }
     }
 
-    private void releaseSeats(BookingEntity bookingEntity) {
+    public void releaseSeats(BookingEntity bookingEntity) {
         Optional<TripEntity> trip = tripRepository.findById(bookingEntity.getTripId());
         if(trip.isPresent()){
             TripEntity tripEntity = trip.get();
