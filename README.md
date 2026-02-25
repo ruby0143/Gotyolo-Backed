@@ -13,7 +13,6 @@ GoTyolo is a trip booking system that allows users to:
 - Cancel bookings with refund calculation
 - Track trip metrics and at-risk trips
 
----
 
 ## Tech Stack
 
