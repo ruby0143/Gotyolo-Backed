@@ -83,6 +83,32 @@ This will start both the application and PostgreSQL database.
 
 ---
 
+## Seed Data
+
+The application comes pre-loaded with sample data for immediate use after startup.
+
+### Automatic Seeding (SQL)
+
+On startup, the `data.sql` script automatically populates:
+
+- **5 Sample Trips:**
+  - Tropical Beach Getaway (Maldives) - Popular trip
+  - Swiss Alps Adventure (Switzerland) - Nearly fully booked
+  - Tokyo City Explorer (Japan) - At-risk trip (low bookings)
+  - African Safari Experience (Kenya) - Future trip
+  - Northern Lights Expedition (Iceland) - Draft status
+
+- **15 Sample Bookings:**
+  - 7 Confirmed bookings
+  - 2 Pending payment bookings
+  - 3 Cancelled bookings (with refund history)
+  - 3 Expired bookings
+
+- **10 Payment Events** for confirmed and cancelled bookings
+
+
+---
+
 ## Documentation
 
 For detailed technical documentation, see:
